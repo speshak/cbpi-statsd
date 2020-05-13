@@ -15,13 +15,16 @@ def init_statsd_client():
                                       "text", "StatsD Hostname")
         except Exception:
             cbpi.notify("StatsD Error",
-                        "Unable to update config parameter", type="danger")
+                        "Unable to update config parameter", type="danger",
+                        timeout=None)
 
-    cbpi.app.logger.info(
-            "Sending sensor data to StatsD server at " + statsd_host)
+    if statsd_host != "":
+        cbpi.notify("StatsD",
+                    "Sending sensor data to StatsD server at " + statsd_host,
+                    type="success", timeout=None)
 
-    global statsd_client
-    statsd_client = StatsClient(host=statsd_host, prefix="cbpi")
+        global statsd_client
+        statsd_client = StatsClient(host=statsd_host, prefix="cbpi")
 
 
 @cbpi.initalizer(order=200)
@@ -32,10 +35,18 @@ def init(cbpi):
 
 @cbpi.backgroundtask(key="statsd_task", interval=60)
 def statsd_background_task(api):
+    cbpi.app.logger.info("StatsD task running")
+    if statsd_client is None:
+        cbpi.app.logger.info("No StatsD client, not sending data")
+        return
+
     with statsd_client.pipeline() as pipe:
+        cbpi.app.logger.info("Logging data to statsd")
         for key, value in cbpi.cache.get("sensors").iteritems():
             if value.hide == 1:
                 continue
 
+            sensor_value = value.instance.get_value()
+
             name = '%s.%d' % (value.type, value.instance.id)
-            pipe.gauge(name, value.instance.get_value())
+            pipe.gauge(name, sensor_value['value'])
