@@ -40,6 +40,7 @@ def init(cbpi):
 
 
 def send_sensor_data():
+    """Send the raw sensor data for all non-hidden sensors"""
     with statsd_client.pipeline() as pipe:
         cbpi.app.logger.info("Logging sensor data to statsd")
         for key, value in cbpi.cache.get("sensors").iteritems():
@@ -57,10 +58,21 @@ def ferm_sensor_data(pipe, prefix, sensor_id):
         return
 
     sensor = cbpi.cache.get("sensors")[int(sensor_id)]
-    pipe.gauge(prefix + sensor_types[sensor.type], sensor.instance.get_value()['value'])
+    pipe.gauge(prefix + sensor_types[sensor.type],
+               sensor.instance.get_value()['value'])
+
+
+def actor_state(actor_id):
+    """Get the current state of an actor"""
+    if actor_id == '':
+        return
+
+    actor = cbpi.cache.get("actors")[int(actor_id)]
+    return actor.state
 
 
 def send_fermenter_data():
+    """Send sensor/actor data grouped by the configured fermenters"""
     with statsd_client.pipeline() as pipe:
         cbpi.app.logger.info("Logging fermenter data to statsd")
 
@@ -71,6 +83,9 @@ def send_fermenter_data():
             ferm_sensor_data(pipe, name, value.sensor)
             ferm_sensor_data(pipe, name, value.sensor2)
             ferm_sensor_data(pipe, name, value.sensor3)
+
+            pipe.gauge(name + 'cooler_state', actor_state(value.cooler))
+            pipe.gauge(name + 'heater_state', actor_state(value.heater))
 
 
 @cbpi.backgroundtask(key="statsd_task", interval=60)
